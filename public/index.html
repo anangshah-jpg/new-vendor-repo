@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vendor Price Difference Dashboard</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Header -->
+    <header class="main-header">
+      <div class="header-left">
+        <div class="logo-area">
+          <i data-lucide="shield-alert" class="icon-logo"></i>
+          <div>
+            <h1>Vendor Price Discrepancy Dashboard</h1>
+            <p class="subtitle">Live tracking of Metabase database mismatches (Invoice Price > Supplier Price)</p>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="sync-status">
+          <span class="pulse-dot"></span>
+          <span id="last-sync-time">Syncing data...</span>
+        </div>
+        <div class="refresh-control">
+          <button id="refresh-btn" class="btn btn-primary" title="Sync Live Data from Metabase">
+            <i data-lucide="refresh-cw" class="icon-spin-hover"></i>
+            <span>Sync Now</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="dashboard-content">
+      
+      <!-- KPI Metric Grid -->
+      <section class="kpi-grid">
+        <!-- KPI 1 -->
+        <div class="kpi-card glass">
+          <div class="kpi-icon-wrapper overcharge">
+            <i data-lucide="trending-up"></i>
+          </div>
+          <div class="kpi-data">
+            <span class="kpi-label">Total Overpayment</span>
+            <h2 id="kpi-total-overcharge" class="kpi-val font-mono">$0.00</h2>
+            <p id="kpi-total-range" class="kpi-desc">Range: YYYY-MM-DD to YYYY-MM-DD</p>
+          </div>
+        </div>
+        <!-- KPI 5: Latest 7 Days -->
+        <div class="kpi-card glass clickable" id="kpi-seven-days-card" title="Click to filter table for last 7 days">
+          <div class="kpi-icon-wrapper average" style="background: rgba(244, 63, 94, 0.08); color: var(--danger); border: 1px solid rgba(244, 63, 94, 0.2);">
+            <i data-lucide="calendar"></i>
+          </div>
+          <div class="kpi-data">
+            <span class="kpi-label">Latest 7 Days Overpayment</span>
+            <h2 id="kpi-seven-days-overcharge" class="kpi-val font-mono">$0.00</h2>
+            <p id="kpi-seven-days-range" class="kpi-desc">From YYYY-MM-DD to YYYY-MM-DD</p>
+          </div>
+        </div>
+        <!-- KPI 2 -->
+        <div class="kpi-card glass">
+          <div class="kpi-icon-wrapper flagged">
+            <i data-lucide="alert-triangle"></i>
+          </div>
+          <div class="kpi-data">
+            <span class="kpi-label">Flagged Transactions</span>
+            <h2 id="kpi-flagged-count" class="kpi-val font-mono">0</h2>
+            <p class="kpi-desc">Transactions with diff &lt; -$0.05</p>
+          </div>
+        </div>
+        <!-- KPI 3 -->
+        <div class="kpi-card glass">
+          <div class="kpi-icon-wrapper average">
+            <i data-lucide="check-circle"></i>
+          </div>
+          <div class="kpi-data">
+            <span class="kpi-label">Claims Received</span>
+            <h2 id="kpi-claims-received" class="kpi-val font-mono">$0.00</h2>
+            <p class="kpi-desc">Total RMA credit claims received</p>
+          </div>
+        </div>
+        <!-- KPI 4 -->
+        <div class="kpi-card glass">
+          <div class="kpi-icon-wrapper max-diff">
+            <i data-lucide="skull"></i>
+          </div>
+          <div class="kpi-data">
+            <span class="kpi-label">Max Single Overpayment</span>
+            <h2 id="kpi-max-mismatch" class="kpi-val font-mono">$0.00</h2>
+            <p class="kpi-desc">Largest single vendor invoice discrepancy</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Charts Section -->
+      <section class="charts-section">
+        <div class="chart-card glass">
+          <div class="chart-header">
+            <h3><i data-lucide="factory"></i> Top 10 Offending Suppliers</h3>
+            <span class="chart-subtitle">Suppliers with the highest cumulative overpayment</span>
+          </div>
+          <div class="chart-body">
+            <canvas id="supplierChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card glass">
+          <div class="chart-header">
+            <h3><i data-lucide="pie-chart"></i> Discrepancy Distribution</h3>
+            <span class="chart-subtitle">Share of transactions by price difference severity</span>
+          </div>
+          <div class="chart-body donut-chart-container">
+            <canvas id="distributionChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Latest 7 Days Discrepancies Details Grid -->
+      <section class="table-section glass" id="seven-days-table-section">
+        <div class="chart-header-row">
+          <div class="chart-header">
+            <h3><i data-lucide="calendar"></i> Latest 7 Days Discrepancies</h3>
+            <span class="chart-subtitle">Detailed records and visual comparison of updates in the trailing 7-day timeframe (Ytdd format)</span>
+          </div>
+          <button id="download-7days-btn" class="btn btn-secondary" title="Download 7-Day Report as CSV">
+            <i data-lucide="download"></i>
+            <span>Export CSV</span>
+          </button>
+        </div>
+        
+        <div class="seven-days-content-grid">
+          <!-- Left Column: Condensed Table -->
+          <div class="seven-days-table-container">
+            <div class="table-wrapper" style="max-height: 280px; overflow-y: auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Updated On</th>
+                    <th>Supplier</th>
+                    <th>PO Number</th>
+                    <th>SKU</th>
+                    <th class="text-right">Qty</th>
+                    <th class="text-right">Difference</th>
+                  </tr>
+                </thead>
+                <tbody id="seven-days-table-body">
+                  <!-- Dynamic Rows Injected Here -->
+                </tbody>
+              </table>
+
+              <div id="seven-days-empty-state" class="empty-state hidden">
+                <i data-lucide="calendar-x" class="empty-icon"></i>
+                <h3>No Recent Discrepancies</h3>
+                <p>No records were updated in the trailing 7-day period.</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Right Column: Bar Chart Visualization -->
+          <div class="seven-days-chart-container">
+            <canvas id="sevenDaysBarChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Filter Controls & Data Table -->
+      <section class="table-section glass">
+        
+        <!-- Table Controls Header -->
+        <div class="table-controls">
+          <div class="search-box">
+            <i data-lucide="search" class="search-icon"></i>
+            <input type="text" id="search-input" placeholder="Search by SKU, Order ID, PO Number...">
+          </div>
+          
+          <div class="filters-group">
+            <div class="filter-item">
+              <label for="supplier-filter">Supplier:</label>
+              <select id="supplier-filter">
+                <option value="all">All Suppliers</option>
+              </select>
+            </div>
+            
+            <div class="filter-item">
+              <label for="vendor-filter">Vendor ID:</label>
+              <select id="vendor-filter">
+                <option value="all">All Vendors</option>
+              </select>
+            </div>
+
+            
+            <div class="filter-item">
+              <label for="diff-range-filter">Severity:</label>
+              <select id="diff-range-filter">
+                <option value="all">All Mismatches</option>
+                <option value="low">Under $1.00</option>
+                <option value="medium">$1.00 - $10.00</option>
+                <option value="high">$10.00 - $100.00</option>
+                <option value="critical">Over $100.00</option>
+              </select>
+            </div>
+
+            <div class="filter-item">
+              <button id="clear-filters-btn" class="btn btn-secondary btn-icon-only" title="Clear Filters">
+                <i data-lucide="filter-x"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Selected Filters Summary -->
+        <div id="active-filters-summary" class="active-filters-summary hidden">
+          <span>Active Filters:</span>
+          <div class="tags-container" id="filter-tags"></div>
+        </div>
+
+        <!-- Table Responsive Wrapper -->
+        <div class="table-wrapper">
+          <table class="data-table" id="orders-table">
+            <thead>
+              <tr>
+                <th class="sortable" data-sort="order_date">Order Date <i data-lucide="chevrons-up-down"></i></th>
+                <th class="sortable" data-sort="updatedon">Updated On <i data-lucide="chevrons-up-down"></i></th>
+                <th class="sortable" data-sort="Supplier_name">Supplier <i data-lucide="chevrons-up-down"></i></th>
+                <th class="sortable" data-sort="vendor_id">Vendor ID <i data-lucide="chevrons-up-down"></i></th>
+                <th class="sortable" data-sort="po_number">PO Number <i data-lucide="chevrons-up-down"></i></th>
+                <th class="sortable" data-sort="order_id">Order ID <i data-lucide="chevrons-up-down"></i></th>
+                <th class="sortable" data-sort="sku">SKU <i data-lucide="chevrons-up-down"></i></th>
+                <th class="sortable text-right" data-sort="quantity">Qty <i data-lucide="chevrons-up-down"></i></th>
+                <th class="sortable text-right" data-sort="supplier_price">Supplier Price <i data-lucide="chevrons-up-down"></i></th>
+                <th class="sortable text-right" data-sort="inv_amt">Inv. Amount <i data-lucide="chevrons-up-down"></i></th>
+                <th class="sortable text-right" data-sort="diff">Difference <i data-lucide="chevrons-up-down"></i></th>
+                <th class="text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="table-body">
+              <!-- Dynamic Rows Inserted Here -->
+            </tbody>
+          </table>
+
+          <!-- Empty State -->
+          <div id="empty-state" class="empty-state hidden">
+            <i data-lucide="package-open" class="empty-icon"></i>
+            <h3>No Discrepancies Found</h3>
+            <p>Try modifying your search queries or clearing active filters.</p>
+          </div>
+        </div>
+
+        <!-- Table Footer / Pagination -->
+        <div class="table-footer">
+          <div class="rows-info">
+            Showing <span id="rows-start" class="font-mono">0</span> to <span id="rows-end" class="font-mono">0</span> of <span id="rows-total" class="font-mono">0</span> discrepancies
+          </div>
+          
+          <div class="page-controls">
+            <div class="page-size-selector">
+              <label for="page-size">Rows per page:</label>
+              <select id="page-size">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </div>
+            
+            <div class="pagination-buttons">
+              <button id="prev-page-btn" class="btn btn-secondary btn-pagination" disabled>
+                <i data-lucide="chevron-left"></i>
+              </button>
+              <div id="pages-container" class="pages-list">
+                <!-- Page numbers injected here -->
+              </div>
+              <button id="next-page-btn" class="btn btn-secondary btn-pagination" disabled>
+                <i data-lucide="chevron-right"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Detail Modal -->
+    <div id="details-modal" class="modal-backdrop hidden">
+      <div class="modal-container glass">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <h3>Discrepancy Details</h3>
+            <span class="modal-badge danger" id="modal-status-badge">Mismatch</span>
+          </div>
+          <button id="close-modal-btn" class="btn-close-modal">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-grid">
+            <div class="modal-col">
+              <h4>Order Metadata</h4>
+              <div class="meta-field">
+                <span class="field-label">Order ID</span>
+                <span class="field-value font-mono copyable" id="modal-order-id">-</span>
+              </div>
+              <div class="meta-field">
+                <span class="field-label">PO Number</span>
+                <span class="field-value font-mono copyable" id="modal-po-number">-</span>
+              </div>
+              <div class="meta-field">
+                <span class="field-label">SKU</span>
+                <span class="field-value font-mono copyable" id="modal-sku">-</span>
+              </div>
+              <div class="meta-field">
+                <span class="field-label">Quantity</span>
+                <span class="field-value font-mono" id="modal-qty">-</span>
+              </div>
+            </div>
+            <div class="modal-col">
+              <h4>Fulfillment Timings</h4>
+              <div class="meta-field">
+                <span class="field-label">Order Date</span>
+                <span class="field-value" id="modal-order-date">-</span>
+              </div>
+              <div class="meta-field">
+                <span class="field-label">Invoice Date</span>
+                <span class="field-value" id="modal-invoice-date">-</span>
+              </div>
+              <div class="meta-field">
+                <span class="field-label">Updated On</span>
+                <span class="field-value" id="modal-updated-on">-</span>
+              </div>
+              <div class="meta-field">
+                <span class="field-label">Timing Mismatch</span>
+                <span class="field-value" id="modal-date-diff">-</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="calculation-summary-card">
+            <h4>Financial Discrepancy Calculation</h4>
+            <div class="calc-row font-mono">
+              <span class="calc-label">Supplier Price per item</span>
+              <span class="calc-value text-muted" id="modal-calc-supplier-price">$0.00</span>
+            </div>
+            <div class="calc-row font-mono border-bottom">
+              <span class="calc-label">Invoice Price per item (Product - Discount)</span>
+              <span class="calc-value text-muted" id="modal-calc-invoice-price">$0.00</span>
+            </div>
+            <div class="calc-row font-mono math-line text-danger font-bold">
+              <span class="calc-label"><i data-lucide="minus"></i> Overpayment Unit Variance (Supplier - Invoice)</span>
+              <span class="calc-value" id="modal-calc-unit-diff">-$0.00</span>
+            </div>
+            <div class="calc-row font-mono font-bold total-mismatch-highlight">
+              <span class="calc-label"><i data-lucide="x-circle"></i> Cumulative Financial Overpayment (Variance × Qty)</span>
+              <span class="calc-value" id="modal-calc-total-diff">-$0.00</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <div class="vendor-info-badge">
+            <i data-lucide="factory"></i> Supplier Code: <strong id="modal-supplier-name">-</strong> | Vendor ID: <strong id="modal-vendor-id">-</strong>
+          </div>
+          <button id="btn-close-modal-footer" class="btn btn-secondary">Close Details</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+    
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
