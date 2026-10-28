@@ -1,15 +1,20 @@
 {
-  "name": "vendor-price-dashboard",
-  "version": "1.0.0",
-  "description": "Automated dashboard for tracking vendor price differences from Metabase live data",
-  "main": "server.js",
-  "type": "commonjs",
+  "name": "replyassist-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node src/server.js",
+    "test": "node --test test/policy.test.js test/security.test.js test/review-lock.test.js test/review-run.test.js test/session.test.js test/cloud.test.js test/manual-review.test.js",
+    "build": "npm test && node scripts/build.mjs",
+    "test:cloud": "node --test test/cloud.test.js"
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2"
+    "fast-xml-parser": "^5.3.0",
+    "@netlify/database": "2.0.1",
+    "pg": "^8.16.0"
   }
 }
